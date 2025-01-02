@@ -3,6 +3,7 @@ package utils
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -26,4 +27,11 @@ func LoadENV() {
 			log.Fatalln("Error loading .env file:", err)
 		}
 	}
+}
+
+func GetWeekNumber() int {
+	t := time.Now()
+	_, week := t.ISOWeek()
+
+	return week
 }

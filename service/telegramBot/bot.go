@@ -1,11 +1,15 @@
 package telegramBot
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"luncher/handler/database"
+	model "luncher/handler/models"
 	"luncher/handler/utils"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"gorm.io/gorm"
 )
 
 var telegramBot *tgbotapi.BotAPI
@@ -33,76 +37,144 @@ func StartBotServer() {
 	u.Timeout = 60
 	updates, _ := telegramBot.GetUpdatesChan(u)
 
+	db := database.Connection().Conn
+
 	// Loop to listen for incoming messages or button presses
 	for update := range updates {
 		if update.Message != nil {
+
 			// Start command to show the meal selection form
 			if update.Message.Text == "/start" {
-				showMealSelectionForm(telegramBot, update.Message.Chat.ID)
+
+				user := model.User{
+					TelegramID: update.Message.Chat.ID,
+					Username:   update.Message.Chat.UserName,
+					Name:       update.Message.Chat.FirstName,
+				}
+
+				var userDB model.User
+				db.Where("telegram_id = ?", user.TelegramID).First(&userDB)
+				if userDB.ID == 0 {
+					db.Create(&user)
+				}
 			}
+
+			user := findUser(db, update)
+
+			if user.ID == 0 {
+				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "خطا در ارتباط با دیتابیس"))
+				continue
+			}
+
+			if update.Message.Text == "/select" {
+
+				showMealSelectionForm(user.Reserves, update.Message.Chat.ID)
+			}
+
 		}
 
 		// Handle button presses (callback queries)
 		if update.CallbackQuery != nil {
-			handleButtonPress(telegramBot, update.CallbackQuery)
+
+			user := findUser(db, update)
+
+			if user.ID == 0 {
+				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "خطا در ارتباط با دیتابیس"))
+				continue
+			}
+
+			handleButtonPress(user.Reserves, update.CallbackQuery)
 		}
 	}
 }
 
+func findUser(db *gorm.DB, update tgbotapi.Update) model.User {
+	user := model.User{}
+
+	err := db.Model(&model.User{}).Where("telegram_id = ?", update.Message.Chat.ID).First(&user)
+	if err.Error != nil {
+		log.Println(err.Error)
+	}
+
+	return user
+}
+
 // Show the meal selection form with inline buttons
-func showMealSelectionForm(bot *tgbotapi.BotAPI, chatID int64) {
+func showMealSelectionForm(reserves []model.Reserve, chatID int64) {
 	// Get the current meal preferences for the user
 	mealPreference := userResponses[chatID]
+
+	// find week number of year
+	weekNumber := utils.GetWeekNumber() % 2
+
+	var mealsString string
+	meals := [14]string{}
+
+	switch weekNumber {
+	case 1:
+		mealsString = utils.Getenv("FIRST_WEEK", "")
+	case 2:
+		mealsString = utils.Getenv("SECOND_WEEK", "")
+	default:
+		mealsString = utils.Getenv("FIRST_WEEK", "")
+	}
+
+
+
+	err := json.Unmarshal([]byte(mealsString), &meals)
+	if err != nil {
+		log.Println(err)
+	}
+
 
 	// Create inline keyboard buttons for each day and meal (lunch and dinner)
 	inlineKeyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("نهار", "نهار"),
-			tgbotapi.NewInlineKeyboardButtonData("شام", "شام"),
+			tgbotapi.NewInlineKeyboardButtonData("شام", "week_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData("نهار", "week_lunch"),
+			tgbotapi.NewInlineKeyboardButtonData("*", "nothing"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Monday", mealPreference.MondayLunch), "monday_lunch"),
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Monday", mealPreference.MondayDinner), "monday_dinner"),
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Monday", mealPreference.MondayDinner), "monday_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText(meals[0], mealPreference.SaturdayDinner), "saturday_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText(meals[1], mealPreference.SaturdayLunch), "saturday_lunch"),
+			tgbotapi.NewInlineKeyboardButtonData("شنبه", "شنبه"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Tuesday", mealPreference.TuesdayLunch), "tuesday_lunch"),
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Tuesday", mealPreference.TuesdayDinner), "tuesday_dinner"),
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Tuesday", mealPreference.TuesdayDinner), "tuesday_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText("سبزی پلو بی ماهی", mealPreference.SundayDinner), "sunday_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText("سبزی پلو با ماهی", mealPreference.SundayLunch), "sunday_lunch"),
+			tgbotapi.NewInlineKeyboardButtonData("یکشنبه", "یکشنبه"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Wednesday", mealPreference.WednesdayLunch), "wednesday_lunch"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText("سبزی پلو بی ماهی", mealPreference.MondayDinner), "monday_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText("سبزی پلو با ماهی", mealPreference.MondayLunch), "monday_lunch"),
+			tgbotapi.NewInlineKeyboardButtonData("دوشنبه", "دوشنبه"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("سبزی پلو با ماهی", mealPreference.WednesdayDinner), "wednesday_dinner"),
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Wednesday", mealPreference.TuesdayDinner), "wednesday_dinner2"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText("سبزی پلو بی ماهی", mealPreference.TuesdayDinner), "tuesday_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText("سبزی پلو با ماهی", mealPreference.TuesdayLunch), "tuesday_lunch"),
+			tgbotapi.NewInlineKeyboardButtonData("سه شنبه", "سه شنبه"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Thursday", mealPreference.ThursdayLunch), "thursday_lunch"),
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Thursday", mealPreference.ThursdayDinner), "thursday_dinner"),
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Thursday", mealPreference.ThursdayDinner), "thursday_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText("سبزی پلو بی ماهی", mealPreference.WednesdayDinner), "wednesday_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText("سبزی پلو با ماهی", mealPreference.WednesdayLunch), "wednesday_lunch"),
+			tgbotapi.NewInlineKeyboardButtonData("چهارشنبه", "چهارشنبه"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Friday", mealPreference.FridayLunch), "friday_lunch"),
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Friday", mealPreference.FridayDinner), "friday_dinner"),
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Friday", mealPreference.FridayDinner), "friday_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText("سبزی پلو بی ماهی", mealPreference.ThursdayDinner), "thursday_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText("سبزی پلو با ماهی", mealPreference.ThursdayLunch), "thursday_lunch"),
+			tgbotapi.NewInlineKeyboardButtonData("پنجشنبه", "پنجشنبه"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Saturday", mealPreference.SaturdayLunch), "saturday_lunch"),
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Saturday", mealPreference.SaturdayDinner), "saturday_dinner"),
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Saturday", mealPreference.SaturdayDinner), "saturday_dinner"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Sunday", mealPreference.SundayLunch), "sunday_lunch"),
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Sunday", mealPreference.SundayDinner), "sunday_dinner"),
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText("Sunday", mealPreference.SundayDinner), "sunday_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText("سبزی پلو بی ماهی", mealPreference.FridayDinner), "friday_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText("سبزی پلو با ماهی", mealPreference.FridayLunch), "friday_lunch"),
+			tgbotapi.NewInlineKeyboardButtonData("جمعه", "جمعه"),
 		),
 	)
 
 	msg := tgbotapi.NewMessage(chatID, "Please select your meal preferences for each day.")
 	msg.ReplyMarkup = inlineKeyboard
 	msg.DisableNotification = true
-	bot.Send(msg)
+	telegramBot.Send(msg)
 }
 
 // Structure to store the meal preferences for each day
@@ -127,7 +199,7 @@ type MealPreferences struct {
 var userResponses = make(map[int64]MealPreferences)
 
 // Handle button press events
-func handleButtonPress(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
+func handleButtonPress(reserves []model.Reserve, callback *tgbotapi.CallbackQuery) {
 	// Get the user ID and the selected meal option
 	userID := int64(callback.From.ID)
 	selectedOption := callback.Data
@@ -180,21 +252,56 @@ func handleButtonPress(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
 	case "sunday_dinner":
 		mealPreference.SundayDinner = !mealPreference.SundayDinner
 		message = toggleMessage("Sunday", mealPreference.SundayDinner)
+	case "week_lunch":
+		mealPreference.MondayLunch = true
+		mealPreference.TuesdayLunch = true
+		mealPreference.WednesdayLunch = true
+		mealPreference.ThursdayLunch = true
+		mealPreference.FridayLunch = true
+		mealPreference.SaturdayLunch = true
+		mealPreference.SundayLunch = true
+		message = "All lunches selected"
+	case "week_dinner":
+		mealPreference.MondayDinner = true
+		mealPreference.TuesdayDinner = true
+		mealPreference.WednesdayDinner = true
+		mealPreference.ThursdayDinner = true
+		mealPreference.FridayDinner = true
+		mealPreference.SaturdayDinner = true
+		mealPreference.SundayDinner = true
+		message = "All dinners selected"
+	case "nothing":
+		mealPreference.MondayLunch = true
+		mealPreference.TuesdayLunch = true
+		mealPreference.WednesdayLunch = true
+		mealPreference.ThursdayLunch = true
+		mealPreference.FridayLunch = true
+		mealPreference.SaturdayLunch = true
+		mealPreference.SundayLunch = true
+		mealPreference.MondayDinner = true
+		mealPreference.TuesdayDinner = true
+		mealPreference.WednesdayDinner = true
+		mealPreference.ThursdayDinner = true
+		mealPreference.FridayDinner = true
+		mealPreference.SaturdayDinner = true
+		mealPreference.SundayDinner = true
+		message = "All meals selected"
 	}
 
 	userResponses[userID] = mealPreference
 
 	// Send the updated message to the user
-	bot.AnswerCallbackQuery(tgbotapi.NewCallback(callback.ID, message))
+	telegramBot.AnswerCallbackQuery(tgbotapi.NewCallback(callback.ID, message))
+
+	// replace showMealSelectionForm with last showMealSelectionForm
+	showMealSelectionForm(reserves, callback.Message.Chat.ID)
 
 	// remove last meal selection message
-	bot.DeleteMessage(tgbotapi.DeleteMessageConfig{
+	telegramBot.DeleteMessage(tgbotapi.DeleteMessageConfig{
 		ChatID:    callback.Message.Chat.ID,
 		MessageID: callback.Message.MessageID,
 	})
 
-	// Update the meal selection form with the current selection
-	showMealSelectionForm(bot, callback.Message.Chat.ID)
 }
 
 // Toggle the message to show if the meal is selected or not
@@ -211,6 +318,6 @@ func getButtonText(meal string, selected bool) string {
 	if selected {
 		return "✅ " + meal
 	}
-	
+
 	return meal
 }

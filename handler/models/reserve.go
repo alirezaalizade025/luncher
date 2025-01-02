@@ -13,3 +13,19 @@ type Reserve struct {
 
 	User User `json:"user" gorm:"foreignKey:UserID"`
 }
+
+type meals struct {
+	Date   time.Time
+	Lunch  bool
+	Dinner bool
+}
+
+type MealPreferences struct {
+	Saturday  meals
+	Sunday    meals
+	Monday    meals
+	Tuesday   meals
+	Wednesday meals
+	Thursday  meals
+	Friday    meals
+}
