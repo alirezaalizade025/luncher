@@ -29,9 +29,55 @@ func LoadENV() {
 	}
 }
 
-func GetWeekNumber() int {
-	t := time.Now()
-	_, week := t.ISOWeek()
+func GetWeekNumber(date time.Time) int {
+
+	_, week := date.ISOWeek()
 
 	return week
+}
+
+func GetFaDayName(weekDay time.Weekday) string {
+	switch weekDay {
+	case time.Saturday:
+		return "شنبه"
+	case time.Sunday:
+		return "یکشنبه"
+	case time.Monday:
+		return "دوشنبه"
+	case time.Tuesday:
+		return "سه شنبه"
+	case time.Wednesday:
+		return "چهارشنبه"
+	case time.Thursday:
+		return "پنجشنبه"
+	case time.Friday:
+		return "جمعه"
+	default:
+		return ""
+	}
+}
+
+func GetJalaliWeekDayNumber(weekDay time.Weekday) int {
+	switch weekDay {
+	case time.Saturday:
+		return 1
+	case time.Sunday:
+		return 2
+	case time.Monday:
+		return 3
+	case time.Tuesday:
+		return 4
+	case time.Wednesday:
+		return 5
+	case time.Thursday:
+		return 6
+	case time.Friday:
+		return 7
+	default:
+		return 0
+	}
+}
+
+func GetJalaliDate(date time.Time) string {
+	return ""
 }

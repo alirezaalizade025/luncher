@@ -13,3 +13,5 @@ type User struct {
 
 	Reserves []Reserve `json:"reserves" gorm:"foreignKey:UserID"`
 }
+
+
