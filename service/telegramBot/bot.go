@@ -276,8 +276,7 @@ func handleButtonPress(user model.User, callback *tgbotapi.CallbackQuery) {
 
 		// if date is today and hour pass from 20 in tehran
 		// show error message
-		location, _ := time.LoadLocation("Asia/Tehran")
-		if date.Before(time.Now().AddDate(0, 0, 1).Truncate(24*time.Hour)) && time.Now().In(location).Hour() >= 20 {
+		if date.Before(time.Now().AddDate(0, 0, 1).Truncate(24*time.Hour)) && (time.Now().Hour() >= 17 && time.Now().Minute() >= 30) {
 			telegramBot.AnswerCallbackQuery(tgbotapi.NewCallback(callback.ID, "زمان تغییر برای این روز به پایان رسیده است"))
 			return
 		}
