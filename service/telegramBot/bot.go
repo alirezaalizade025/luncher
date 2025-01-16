@@ -14,6 +14,7 @@ import (
 )
 
 var telegramBot *tgbotapi.BotAPI
+var memCache *utils.Store
 
 func LoadBot() {
 
@@ -40,6 +41,10 @@ func StartBotServer() {
 
 	db := database.Connection().Conn
 
+	// setup memCache
+	memCache = utils.MemCache()
+	go memCache.Cleanup()
+
 	// Loop to listen for incoming messages or button presses
 	for update := range updates {
 		if update.Message != nil {
@@ -62,7 +67,7 @@ func StartBotServer() {
 				// todo: select always lunch/dinner
 
 				// welcome message
-				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "سلام"))
+				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "در اینجا پیام راهنما نصب خواهد شد."))
 			}
 
 			user := findUser(db, update.Message.Chat.ID)
@@ -83,7 +88,6 @@ func StartBotServer() {
 		if update.CallbackQuery != nil {
 
 			//find user id
-
 			user := findUser(db, int64(update.CallbackQuery.From.ID))
 
 			if user.ID == 0 {
@@ -170,7 +174,14 @@ func showMealSelectionForm(user model.User, chatID int64) {
 	msg := tgbotapi.NewMessage(chatID, "Please select your meal preferences for each day.")
 	msg.ReplyMarkup = inlineKeyboard
 	msg.DisableNotification = true
-	telegramBot.Send(msg)
+	message, err := telegramBot.Send(msg)
+	if err != nil {
+		log.Println("show meal error", err)
+		return
+	}
+
+	memCacheKey := fmt.Sprintf("user_%d_last_message", chatID)
+	memCache.Set(memCacheKey, message.MessageID, 1*time.Minute)
 }
 
 func generateMeals() map[string][]string {
@@ -324,14 +335,26 @@ func handleButtonPress(user model.User, callback *tgbotapi.CallbackQuery) {
 
 	}
 
-	// replace showMealSelectionForm with last showMealSelectionForm
-	showMealSelectionForm(user, callback.Message.Chat.ID)
+	var lastMessageID int
+	item, found := memCache.Get(fmt.Sprintf("user_%d_last_message", callback.From.ID))
+	if !found {
+		lastMessageID = callback.Message.MessageID
+	} else {
+		lastMessageID = item.(int)
+	}
 
 	// remove last meal selection message
-	telegramBot.DeleteMessage(tgbotapi.DeleteMessageConfig{
+	_, err := telegramBot.DeleteMessage(tgbotapi.DeleteMessageConfig{
 		ChatID:    callback.Message.Chat.ID,
-		MessageID: callback.Message.MessageID,
+		MessageID: lastMessageID,
 	})
+
+	if err != nil {
+		log.Println(err)
+	}
+
+	// replace showMealSelectionForm with last showMealSelectionForm
+	showMealSelectionForm(user, callback.Message.Chat.ID)
 
 }
 
