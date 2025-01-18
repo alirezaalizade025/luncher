@@ -136,6 +136,7 @@ func showMealSelectionForm(user model.User, chatID int64) {
 		weekNumber := utils.GetWeekNumber(date) % 2
 		weekDay := date.Weekday()
 		faDayName := utils.GetFaDayName(weekDay)
+		_, faMonth, faDay := utils.GregorianToJalali(date.Year(), int(date.Month()), date.Day())
 
 		var lunchMeals []string
 		var dinnerMeals []string
@@ -159,10 +160,12 @@ func showMealSelectionForm(user model.User, chatID int64) {
 			}
 		}
 
+		key := fmt.Sprintf("%s (%d/%d)", faDayName, faMonth, faDay)
+
 		rowButton := tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(getButtonText(lunchMeals[dayIndex], selectedMeal.HasDinner), fmt.Sprintf("%s_dinner", date.Format("2006-01-02"))),
 			tgbotapi.NewInlineKeyboardButtonData(getButtonText(dinnerMeals[dayIndex], selectedMeal.HasLunch), fmt.Sprintf("%s_lunch", date.Format("2006-01-02"))),
-			tgbotapi.NewInlineKeyboardButtonData(faDayName, date.Format("2006-01-02")),
+			tgbotapi.NewInlineKeyboardButtonData(key, date.Format("2006-01-02")),
 		)
 
 		buttons = append(buttons, rowButton)
