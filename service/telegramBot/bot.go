@@ -7,6 +7,8 @@ import (
 	"luncher/handler/database"
 	model "luncher/handler/models"
 	"luncher/handler/utils"
+	"strconv"
+	"strings"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
@@ -47,7 +49,29 @@ func StartBotServer() {
 
 	// Loop to listen for incoming messages or button presses
 	for update := range updates {
+
 		if update.Message != nil {
+
+			if _, found := memCache.Get(fmt.Sprintf("%s_set_meal", update.Message.From.UserName)); found {
+
+				handleSetMealName(update, db)
+				continue
+			}
+
+			if update.Message.Text == "/setList" {
+				if !isAdmin(update.Message.From.UserName) {
+
+					telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "شما دسترسی ندارید."))
+
+					log.Printf("Unauthorized access - username: %s", update.Message.From.UserName)
+					continue
+				} else {
+
+					showMealSetFrom(update.Message.Chat.ID)
+				}
+
+				return
+			}
 
 			// Start command to show the meal selection form
 			if update.Message.Text == "/start" {
@@ -87,6 +111,13 @@ func StartBotServer() {
 		// Handle button presses (callback queries)
 		if update.CallbackQuery != nil {
 
+			if strings.HasPrefix(update.CallbackQuery.Data, "set_lunch_") ||
+				strings.HasPrefix(update.CallbackQuery.Data, "set_dinner_") {
+
+				handleSetMealList(update)
+				continue
+			}
+
 			//find user id
 			user := findUser(db, int64(update.CallbackQuery.From.ID))
 
@@ -98,6 +129,56 @@ func StartBotServer() {
 			handleButtonPress(user, update.CallbackQuery)
 		}
 	}
+}
+
+func handleSetMealName(update tgbotapi.Update, db *gorm.DB) {
+	mealData, _ := memCache.Get(fmt.Sprintf("%s_set_meal", update.Message.From.UserName))
+	mealIDString := mealData.(map[string]string)["mealID"]
+	mealType := mealData.(map[string]string)["mealType"]
+
+	mealID, _ := strconv.Atoi(mealIDString)
+
+	meal := model.Meal{
+		ID: uint(mealID),
+	}
+
+	if mealType == "lunch" {
+		meal.Lunch = &update.Message.Text
+	} else if mealType == "dinner" {
+		meal.Dinner = &update.Message.Text
+	}
+
+	db.Save(&meal)
+
+	telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Meal updated successfully"))
+	memCache.Delete(fmt.Sprintf("%s_set_meal", update.Message.From.UserName))
+
+	showMealSetFrom(int64(update.Message.Chat.ID))
+}
+
+func handleSetMealList(update tgbotapi.Update) {
+	if !isAdmin(update.CallbackQuery.From.UserName) {
+
+		telegramBot.Send(tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, "شما دسترسی ندارید."))
+
+		log.Printf("Unauthorized access - username: %s", update.CallbackQuery.From.UserName)
+		return
+	}
+
+	mealID := strings.Split(update.CallbackQuery.Data, "_")[2]
+	mealID = strings.Trim(mealID, " ")
+
+	mealType := strings.Split(update.CallbackQuery.Data, "_")[1]
+	mealType = strings.Trim(mealType, " ")
+
+	memCacheData := map[string]string{
+		"mealID":   mealID,
+		"mealType": mealType,
+	}
+
+	memCache.Set(fmt.Sprintf("%s_set_meal", update.CallbackQuery.From.UserName), memCacheData, 30*time.Second)
+
+	telegramBot.Send(tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, fmt.Sprintf("Enter %s for day %s:", mealType, mealID)))
 }
 
 func findUser(db *gorm.DB, id int64) model.User {
@@ -185,6 +266,61 @@ func showMealSelectionForm(user model.User, chatID int64) {
 
 	memCacheKey := fmt.Sprintf("user_%d_last_message", chatID)
 	memCache.Set(memCacheKey, message.MessageID, 1*time.Minute)
+}
+
+func showMealSetFrom(chatID int64) {
+
+	buttons := [][]tgbotapi.InlineKeyboardButton{}
+
+	var next14DaysMeals []model.Meal
+	db := database.Connection().Conn
+	db.Order("id").Find(&next14DaysMeals)
+
+	for i := 1; i < 15; i++ {
+
+		// find day record by when next14DaysMeals.id = i
+		var dayMeal model.Meal
+		for _, meal := range next14DaysMeals {
+			if meal.ID == uint(i) {
+				dayMeal = meal
+				break
+			}
+		}
+
+		if dayMeal.Dinner == nil {
+			dinner := "شام"
+			dayMeal.Dinner = &dinner
+		}
+
+		if dayMeal.Lunch == nil {
+			lunch := "نهار"
+			dayMeal.Lunch = &lunch
+		}
+
+		weekNumber := i
+		if i > 7 {
+			weekNumber = i - 7
+		}
+
+		rowButton := tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(*dayMeal.Dinner, fmt.Sprintf("set_dinner_%d", i)),
+			tgbotapi.NewInlineKeyboardButtonData(*dayMeal.Lunch, fmt.Sprintf("set_lunch_%d", i)),
+			tgbotapi.NewInlineKeyboardButtonData(utils.GetFaDayNameByNumber(weekNumber), "d"),
+		)
+
+		buttons = append(buttons, rowButton)
+	}
+
+	inlineKeyboard := tgbotapi.NewInlineKeyboardMarkup(buttons...)
+
+	msg := tgbotapi.NewMessage(chatID, "Please select your meal preferences for each day.")
+	msg.ReplyMarkup = inlineKeyboard
+	msg.DisableNotification = true
+	_, err := telegramBot.Send(msg)
+	if err != nil {
+		log.Println("show meal list error", err)
+		return
+	}
 }
 
 func generateMeals() map[string][]string {
@@ -368,4 +504,22 @@ func getButtonText(meal string, selected bool) string {
 	}
 
 	return meal
+}
+
+func isAdmin(username string) bool {
+	admins := utils.Getenv("ADMINS", "")
+	var adminList []string
+	err := json.Unmarshal([]byte(admins), &adminList)
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+
+	for _, admin := range adminList {
+		if admin == username {
+			return true
+		}
+	}
+
+	return false
 }

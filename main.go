@@ -9,13 +9,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-
 func main() {
 
 	utils.LoadENV()
 
 	db := database.Connection()
-	db.Conn.AutoMigrate(&model.Reserve{}, &model.User{})
+	db.Conn.AutoMigrate(&model.Reserve{}, &model.User{}, &model.Meal{})
 
 	app := gin.Default()
 	gin.SetMode(gin.ReleaseMode)

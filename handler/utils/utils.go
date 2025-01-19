@@ -58,6 +58,27 @@ func GetFaDayName(weekDay time.Weekday) string {
 	}
 }
 
+func GetFaDayNameByNumber(number int) string {
+	switch number {
+	case 1:
+		return "شنبه"
+	case 2:
+		return "یکشنبه"
+	case 3:
+		return "دوشنبه"
+	case 4:
+		return "سه شنبه"
+	case 5:
+		return "چهارشنبه"
+	case 6:
+		return "پنجشنبه"
+	case 7:
+		return "جمعه"
+	default:
+		return ""
+	}
+}
+
 func GetJalaliWeekDayNumber(weekDay time.Weekday) int {
 	switch weekDay {
 	case time.Saturday:
