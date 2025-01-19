@@ -219,8 +219,8 @@ func showMealSelectionForm(user model.User, chatID int64) {
 		faDayName := utils.GetFaDayName(weekDay)
 		_, faMonth, faDay := utils.GregorianToJalali(date.Year(), int(date.Month()), date.Day())
 
-		var lunchMeals []string
-		var dinnerMeals []string
+		var lunchMeals [7]string
+		var dinnerMeals [7]string
 
 		dayIndex := utils.GetJalaliWeekDayNumber(weekDay) - 1
 		if weekNumber == 0 {
@@ -244,8 +244,8 @@ func showMealSelectionForm(user model.User, chatID int64) {
 		key := fmt.Sprintf("%s (%d/%d)", faDayName, faMonth, faDay)
 
 		rowButton := tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText(lunchMeals[dayIndex], selectedMeal.HasDinner), fmt.Sprintf("%s_dinner", date.Format("2006-01-02"))),
 			tgbotapi.NewInlineKeyboardButtonData(getButtonText(dinnerMeals[dayIndex], selectedMeal.HasLunch), fmt.Sprintf("%s_lunch", date.Format("2006-01-02"))),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText(lunchMeals[dayIndex], selectedMeal.HasDinner), fmt.Sprintf("%s_dinner", date.Format("2006-01-02"))),
 			tgbotapi.NewInlineKeyboardButtonData(key, date.Format("2006-01-02")),
 		)
 
@@ -323,39 +323,85 @@ func showMealSetFrom(chatID int64) {
 	}
 }
 
-func generateMeals() map[string][]string {
+func generateMeals() map[string][7]string {
 
-	firstWeekLunch := utils.Getenv("FIRST_WEEK_LUNCH", "")
-	secondWeekLunch := utils.Getenv("SECOND_WEEK_LUNCH", "")
-	firstWeekDinner := utils.Getenv("FIRST_WEEK_DINNER", "")
-	secondWeekDinner := utils.Getenv("SECOND_WEEK_DINNER", "")
+	var firstLunchMeals [7]string
+	var secondLunchMeals [7]string
+	var firstDinnerMeals [7]string
+	var secondDinnerMeals [7]string
 
-	var firstLunchMeals []string
-	var secondLunchMeals []string
-	var firstDinnerMeals []string
-	var secondDinnerMeals []string
+	db := database.Connection().Conn
 
-	err := json.Unmarshal([]byte(firstWeekLunch), &firstLunchMeals)
-	if err != nil {
-		log.Println(err)
+	var meals []model.Meal
+	db.Model(&model.Meal{}).Find(&meals)
+
+	// fill empty meals
+	for i := 1; i < 8; i++ {
+
+		// check if meal with id = i exists place it
+		for _, m := range meals {
+
+			if m.ID == uint(i) {
+
+				if m.Lunch == nil {
+					firstLunchMeals[i-1] = "نهار"
+				} else {
+					firstLunchMeals[i-1] = *m.Lunch
+				}
+
+				if m.Dinner == nil {
+					firstDinnerMeals[i-1] = "شام"
+				} else {
+					firstDinnerMeals[i-1] = *m.Dinner
+				}
+
+				break
+			}
+		}
+
+		if firstLunchMeals[i-1] == "" {
+			firstLunchMeals[i-1] = "نهار"
+		}
+
+		if firstDinnerMeals[i-1] == "" {
+			firstDinnerMeals[i-1] = "شام"
+		}
 	}
 
-	err = json.Unmarshal([]byte(secondWeekLunch), &secondLunchMeals)
-	if err != nil {
-		log.Println(err)
+	// fill empty meals
+	for i := 8; i < 15; i++ {
+
+		// check if meal with id = i exists place it
+		for _, m := range meals {
+			if m.ID == uint(i) {
+
+				if m.Lunch == nil {
+					secondLunchMeals[i-7-1] = "نهار"
+				} else {
+					secondLunchMeals[i-7-1] = *m.Lunch
+				}
+
+				if m.Dinner == nil {
+					secondDinnerMeals[i-7-1] = "شام"
+				} else {
+					secondDinnerMeals[i-7-1] = *m.Dinner
+				}
+
+				break
+			}
+		}
+
+		if secondLunchMeals[i-7-1] == "" {
+			secondLunchMeals[i-7-1] = "نهار"
+		}
+
+		if secondDinnerMeals[i-7-1] == "" {
+			secondDinnerMeals[i-7-1] = "شام"
+		}
+
 	}
 
-	err = json.Unmarshal([]byte(firstWeekDinner), &firstDinnerMeals)
-	if err != nil {
-		log.Println(err)
-	}
-
-	err = json.Unmarshal([]byte(secondWeekDinner), &secondDinnerMeals)
-	if err != nil {
-		log.Println(err)
-	}
-
-	return map[string][]string{
+	return map[string][7]string{
 		"firstLunchMeals":   firstLunchMeals,
 		"secondLunchMeals":  secondLunchMeals,
 		"firstDinnerMeals":  firstDinnerMeals,
