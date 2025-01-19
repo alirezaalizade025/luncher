@@ -143,3 +143,14 @@ func GregorianToJalali(year, month, day int) (int, int, int) {
 
 	return jalaliYear, jalaliMonth, jalaliDay
 }
+
+func GetJalaliWeekNumber(date time.Time) int {
+
+	weekNumber := GetWeekNumber(date) % 2
+
+	if (date.Weekday() == time.Saturday) || (date.Weekday() == time.Sunday) {
+		weekNumber--
+	}
+	return int(math.Abs(float64(weekNumber)))
+
+}

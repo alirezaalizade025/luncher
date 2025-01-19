@@ -70,7 +70,7 @@ func StartBotServer() {
 					showMealSetFrom(update.Message.Chat.ID)
 				}
 
-				return
+				continue
 			}
 
 			// Start command to show the meal selection form
@@ -207,29 +207,20 @@ func showMealSelectionForm(user model.User, chatID int64) {
 	db := database.Connection().Conn
 	db.Where("user_id = ? AND date >= ?", user.ID, time.Now().Truncate(24*time.Hour)).Find(&next14DaysReserves)
 
-	meals := generateMeals()
+	lunchesList, dinnersList := generateMeals()
 
 	for i := 0; i < 14; i++ {
 
 		date := time.Now().AddDate(0, 0, i)
 
 		// find week number of year
-		weekNumber := utils.GetWeekNumber(date) % 2
+		weekNumber := utils.GetJalaliWeekNumber(date)
 		weekDay := date.Weekday()
+		faDayNumber := utils.GetJalaliWeekDayNumber(weekDay)
 		faDayName := utils.GetFaDayName(weekDay)
 		_, faMonth, faDay := utils.GregorianToJalali(date.Year(), int(date.Month()), date.Day())
 
-		var lunchMeals [7]string
-		var dinnerMeals [7]string
-
-		dayIndex := utils.GetJalaliWeekDayNumber(weekDay) - 1
-		if weekNumber == 0 {
-			lunchMeals = meals["firstLunchMeals"]
-			dinnerMeals = meals["firstDinnerMeals"]
-		} else {
-			lunchMeals = meals["secondLunchMeals"]
-			dinnerMeals = meals["secondDinnerMeals"]
-		}
+		index := int(weekNumber*7 + int(faDayNumber)) - 1
 
 		// Check if the user has already selected a meal for this day
 		var selectedMeal model.Reserve
@@ -244,8 +235,8 @@ func showMealSelectionForm(user model.User, chatID int64) {
 		key := fmt.Sprintf("%s (%d/%d)", faDayName, faMonth, faDay)
 
 		rowButton := tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText(dinnerMeals[dayIndex], selectedMeal.HasLunch), fmt.Sprintf("%s_lunch", date.Format("2006-01-02"))),
-			tgbotapi.NewInlineKeyboardButtonData(getButtonText(lunchMeals[dayIndex], selectedMeal.HasDinner), fmt.Sprintf("%s_dinner", date.Format("2006-01-02"))),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText(dinnersList[index], selectedMeal.HasDinner), fmt.Sprintf("%s_dinner", date.Format("2006-01-02"))),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText(lunchesList[index], selectedMeal.HasLunch), fmt.Sprintf("%s_lunch", date.Format("2006-01-02"))),
 			tgbotapi.NewInlineKeyboardButtonData(key, date.Format("2006-01-02")),
 		)
 
@@ -323,90 +314,50 @@ func showMealSetFrom(chatID int64) {
 	}
 }
 
-func generateMeals() map[string][7]string {
-
-	var firstLunchMeals [7]string
-	var secondLunchMeals [7]string
-	var firstDinnerMeals [7]string
-	var secondDinnerMeals [7]string
+func generateMeals() ([14]string, [14]string) {
 
 	db := database.Connection().Conn
 
 	var meals []model.Meal
 	db.Model(&model.Meal{}).Find(&meals)
 
+	lunches := [14]string{}
+	dinners := [14]string{}
+
 	// fill empty meals
-	for i := 1; i < 8; i++ {
+	for i := 0; i < 14; i++ {
 
 		// check if meal with id = i exists place it
 		for _, m := range meals {
 
-			if m.ID == uint(i) {
+			if m.ID == uint(i+1) {
 
 				if m.Lunch == nil {
-					firstLunchMeals[i-1] = "نهار"
+					lunches[i] = "نهار"
 				} else {
-					firstLunchMeals[i-1] = *m.Lunch
+					lunches[i] = *m.Lunch
 				}
 
 				if m.Dinner == nil {
-					firstDinnerMeals[i-1] = "شام"
+					dinners[i] = "شام"
 				} else {
-					firstDinnerMeals[i-1] = *m.Dinner
+					dinners[i] = *m.Dinner
 				}
 
 				break
 			}
 		}
 
-		if firstLunchMeals[i-1] == "" {
-			firstLunchMeals[i-1] = "نهار"
+		if lunches[i] == "" {
+			lunches[i] = "نهار"
 		}
 
-		if firstDinnerMeals[i-1] == "" {
-			firstDinnerMeals[i-1] = "شام"
+		if dinners[i] == "" {
+			dinners[i] = "شام"
 		}
 	}
 
-	// fill empty meals
-	for i := 8; i < 15; i++ {
-
-		// check if meal with id = i exists place it
-		for _, m := range meals {
-			if m.ID == uint(i) {
-
-				if m.Lunch == nil {
-					secondLunchMeals[i-7-1] = "نهار"
-				} else {
-					secondLunchMeals[i-7-1] = *m.Lunch
-				}
-
-				if m.Dinner == nil {
-					secondDinnerMeals[i-7-1] = "شام"
-				} else {
-					secondDinnerMeals[i-7-1] = *m.Dinner
-				}
-
-				break
-			}
-		}
-
-		if secondLunchMeals[i-7-1] == "" {
-			secondLunchMeals[i-7-1] = "نهار"
-		}
-
-		if secondDinnerMeals[i-7-1] == "" {
-			secondDinnerMeals[i-7-1] = "شام"
-		}
-
-	}
-
-	return map[string][7]string{
-		"firstLunchMeals":   firstLunchMeals,
-		"secondLunchMeals":  secondLunchMeals,
-		"firstDinnerMeals":  firstDinnerMeals,
-		"secondDinnerMeals": secondDinnerMeals,
-	}
+	return lunches, dinners
 }
 
 // Handle button press events
