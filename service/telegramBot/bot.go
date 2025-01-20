@@ -73,6 +73,97 @@ func StartBotServer() {
 				continue
 			}
 
+			if update.Message.Text == "/getCounts" {
+				if !isAdmin(update.Message.From.UserName) {
+
+					telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "شما دسترسی ندارید."))
+
+					log.Printf("Unauthorized access - username: %s", update.Message.From.UserName)
+					continue
+				}
+
+				var alwaysLunchCounts int64
+				var todayHasLunchCounts int64
+				db.Model(&model.User{}).Where("always_lunch = ?", true).Count(&alwaysLunchCounts)
+				query := db.Model(&model.Reserve{})
+				query = query.Where("date = ? AND has_lunch = ?", time.Now().Truncate(24*time.Hour), true)
+				query = query.Where("(SELECT COUNT(*) FROM users WHERE users.id = reserves.user_id AND users.always_lunch = true) = 0")
+				query.Count(&todayHasLunchCounts)
+
+				var alwaysDinnerCounts int64
+				var todayHasDinnerCounts int64
+				db.Model(&model.User{}).Where("always_dinner = ?", true).Count(&alwaysDinnerCounts)
+				query2 := db.Model(&model.Reserve{})
+				query2 = query.Where("date = ? AND has_dinner = ?", time.Now().Truncate(24*time.Hour), true)
+				query2 = query.Where("(SELECT COUNT(*) FROM users WHERE users.id = reserves.user_id AND users.always_dinner = true) = 0")
+				query2.Count(&todayHasDinnerCounts)
+
+				statsMessage := fmt.Sprintf("نهار: %d\nشام: %d", todayHasLunchCounts, todayHasDinnerCounts)
+
+				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, statsMessage))
+
+				continue
+			}
+
+			if update.Message.Text == "/getReserves" {
+				if !isAdmin(update.Message.From.UserName) {
+
+					telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "شما دسترسی ندارید."))
+
+					log.Printf("Unauthorized access - username: %s", update.Message.From.UserName)
+					continue
+				}
+
+				var statsMessage strings.Builder
+				today := time.Now()
+
+				for i := 0; i < 14; i++ {
+					var lunchUsers []model.User
+
+					date := today.AddDate(0, 0, i).Truncate(24 * time.Hour).Format("2006-01-02")
+
+					db.Model(&model.User{}).
+						Where("always_lunch = ? OR id IN (SELECT user_id FROM reserves WHERE has_lunch = ? AND date = ?)", true, true, date).
+						Find(&lunchUsers)
+
+					// Query dinner users for the current date
+					var dinnerUsers []model.User
+					db.Model(&model.User{}).
+						Where("always_dinner = ? OR id IN (SELECT user_id FROM reserves WHERE has_dinner = ? AND date = ?)", true, true, date).
+						Find(&dinnerUsers)
+
+					// Collect lunch and dinner usernames
+					lunchUsernames := []string{}
+					for _, user := range lunchUsers {
+						lunchUsernames = append(lunchUsernames, fmt.Sprintf("@%s", user.Username))
+					}
+
+					dinnerUsernames := []string{}
+					for _, user := range dinnerUsers {
+						dinnerUsernames = append(dinnerUsernames, fmt.Sprintf("@%s", user.Username))
+					}
+
+					Date := today.AddDate(0, 0, i)
+
+					_, jalaliDateMonth, jalaliDateDay := utils.GregorianToJalali(Date.Year(), int(Date.Month()), Date.Day())
+
+					// Build the stats message for the current date
+					statsMessage.WriteString(fmt.Sprintf(
+						"%s\n\nlunch: %d\n%s\n\ndinner: %d\n%s\n\n----------\n",
+						fmt.Sprintf("%d/%d", jalaliDateMonth, jalaliDateDay),
+						len(lunchUsers),
+						strings.Join(lunchUsernames, "\n"),
+						len(dinnerUsers),
+						strings.Join(dinnerUsernames, "\n"),
+					))
+				}
+
+				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, statsMessage.String()))
+
+				continue
+
+			}
+
 			// Start command to show the meal selection form
 			if update.Message.Text == "/start" {
 
@@ -104,6 +195,10 @@ func StartBotServer() {
 			if update.Message.Text == "/select" {
 
 				showMealSelectionForm(user, update.Message.Chat.ID)
+			}
+
+			if update.Message.Text == "/help" {
+				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "به زودی در این محل راهنما قرار میگیرد."))
 			}
 
 		}
@@ -220,7 +315,7 @@ func showMealSelectionForm(user model.User, chatID int64) {
 		faDayName := utils.GetFaDayName(weekDay)
 		_, faMonth, faDay := utils.GregorianToJalali(date.Year(), int(date.Month()), date.Day())
 
-		index := int(weekNumber*7 + int(faDayNumber)) - 1
+		index := int(weekNumber*7+int(faDayNumber)) - 1
 
 		// Check if the user has already selected a meal for this day
 		var selectedMeal model.Reserve

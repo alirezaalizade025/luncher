@@ -141,6 +141,17 @@ func GregorianToJalali(year, month, day int) (int, int, int) {
 		remainingDays -= float64(days)
 	}
 
+	// this part make issue
+	jalaliDay++
+	if jalaliDay > monthDays[jalaliMonth-1] {
+		jalaliDay = 1
+		jalaliMonth++
+		if jalaliMonth > 12 {
+			jalaliMonth = 1
+			jalaliYear++
+		}
+	}
+
 	return jalaliYear, jalaliMonth, jalaliDay
 }
 
