@@ -88,17 +88,7 @@ func StartBotServer() {
 			// Start command to show the meal selection form
 			if update.Message.Text == "/start" {
 
-				user := model.User{
-					TelegramID: update.Message.Chat.ID,
-					Username:   update.Message.Chat.UserName,
-					Name:       update.Message.Chat.FirstName,
-				}
-
-				var userDB model.User
-				db.Where("telegram_id = ?", user.TelegramID).First(&userDB)
-				if userDB.ID == 0 {
-					db.Create(&user)
-				}
+				createUser(update, db)
 
 				// todo: select always lunch/dinner
 
@@ -109,8 +99,8 @@ func StartBotServer() {
 			user := findUser(db, update.Message.Chat.ID)
 
 			if user.ID == 0 {
-				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "خطا در ارتباط با دیتابیس"))
-				continue
+
+				createUser(update, db)
 			}
 
 			if update.Message.Text == "/select" {
@@ -181,6 +171,22 @@ func StartBotServer() {
 			handleButtonPress(user, update.CallbackQuery)
 		}
 	}
+}
+
+func createUser(update tgbotapi.Update, db *gorm.DB) model.User {
+	user := model.User{
+		TelegramID: update.Message.Chat.ID,
+		Username:   update.Message.Chat.UserName,
+		Name:       update.Message.Chat.FirstName,
+	}
+
+	var userDB model.User
+	db.Where("telegram_id = ?", user.TelegramID).First(&userDB)
+	if userDB.ID == 0 {
+		db.Create(&user)
+	}
+
+	return user
 }
 
 func showCounts(update tgbotapi.Update, db *gorm.DB) {
