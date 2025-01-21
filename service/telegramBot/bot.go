@@ -74,94 +74,15 @@ func StartBotServer() {
 			}
 
 			if update.Message.Text == "/getCounts" {
-				if !isAdmin(update.Message.From.UserName) {
-
-					telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "شما دسترسی ندارید."))
-
-					log.Printf("Unauthorized access - username: %s", update.Message.From.UserName)
-					continue
-				}
-
-				var alwaysLunchCounts int64
-				var todayHasLunchCounts int64
-				db.Model(&model.User{}).Where("always_lunch = ?", true).Count(&alwaysLunchCounts)
-				query := db.Model(&model.Reserve{})
-				query = query.Where("date = ? AND has_lunch = ?", time.Now().Truncate(24*time.Hour), true)
-				query = query.Where("(SELECT COUNT(*) FROM users WHERE users.id = reserves.user_id AND users.always_lunch = true) = 0")
-				query.Count(&todayHasLunchCounts)
-
-				var alwaysDinnerCounts int64
-				var todayHasDinnerCounts int64
-				db.Model(&model.User{}).Where("always_dinner = ?", true).Count(&alwaysDinnerCounts)
-				query2 := db.Model(&model.Reserve{})
-				query2 = query.Where("date = ? AND has_dinner = ?", time.Now().Truncate(24*time.Hour), true)
-				query2 = query.Where("(SELECT COUNT(*) FROM users WHERE users.id = reserves.user_id AND users.always_dinner = true) = 0")
-				query2.Count(&todayHasDinnerCounts)
-
-				statsMessage := fmt.Sprintf("نهار: %d\nشام: %d", todayHasLunchCounts, todayHasDinnerCounts)
-
-				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, statsMessage))
+				showCounts(update, db)
 
 				continue
 			}
 
 			if update.Message.Text == "/getReserves" {
-				if !isAdmin(update.Message.From.UserName) {
 
-					telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "شما دسترسی ندارید."))
-
-					log.Printf("Unauthorized access - username: %s", update.Message.From.UserName)
-					continue
-				}
-
-				var statsMessage strings.Builder
-				today := time.Now()
-
-				for i := 0; i < 14; i++ {
-					var lunchUsers []model.User
-
-					date := today.AddDate(0, 0, i).Truncate(24 * time.Hour).Format("2006-01-02")
-
-					db.Model(&model.User{}).
-						Where("always_lunch = ? OR id IN (SELECT user_id FROM reserves WHERE has_lunch = ? AND date = ?)", true, true, date).
-						Find(&lunchUsers)
-
-					// Query dinner users for the current date
-					var dinnerUsers []model.User
-					db.Model(&model.User{}).
-						Where("always_dinner = ? OR id IN (SELECT user_id FROM reserves WHERE has_dinner = ? AND date = ?)", true, true, date).
-						Find(&dinnerUsers)
-
-					// Collect lunch and dinner usernames
-					lunchUsernames := []string{}
-					for _, user := range lunchUsers {
-						lunchUsernames = append(lunchUsernames, fmt.Sprintf("@%s", user.Username))
-					}
-
-					dinnerUsernames := []string{}
-					for _, user := range dinnerUsers {
-						dinnerUsernames = append(dinnerUsernames, fmt.Sprintf("@%s", user.Username))
-					}
-
-					Date := today.AddDate(0, 0, i)
-
-					_, jalaliDateMonth, jalaliDateDay := utils.GregorianToJalali(Date.Year(), int(Date.Month()), Date.Day())
-
-					// Build the stats message for the current date
-					statsMessage.WriteString(fmt.Sprintf(
-						"%s\n\nlunch: %d\n%s\n\ndinner: %d\n%s\n\n----------\n",
-						fmt.Sprintf("%d/%d", jalaliDateMonth, jalaliDateDay),
-						len(lunchUsers),
-						strings.Join(lunchUsernames, "\n"),
-						len(dinnerUsers),
-						strings.Join(dinnerUsernames, "\n"),
-					))
-				}
-
-				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, statsMessage.String()))
-
+				showReservesDetails(update, db)
 				continue
-
 			}
 
 			// Start command to show the meal selection form
@@ -201,6 +122,11 @@ func StartBotServer() {
 				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "به زودی در این محل راهنما قرار میگیرد."))
 			}
 
+			if update.Message.Text == "/setting" {
+
+				showSettingForm(user, update.Message.Chat.ID)
+			}
+
 		}
 
 		// Handle button presses (callback queries)
@@ -221,9 +147,122 @@ func StartBotServer() {
 				continue
 			}
 
+			if strings.HasPrefix(update.CallbackQuery.Data, "setting_") {
+
+				if update.CallbackQuery.Data == "setting_always_lunch" {
+
+					user.AlwaysLunch = !user.AlwaysLunch
+					db.Save(&user)
+				}
+
+				if update.CallbackQuery.Data == "setting_always_dinner" {
+
+					user.AlwaysDinner = !user.AlwaysDinner
+					db.Save(&user)
+				}
+
+				telegramBot.AnswerCallbackQuery(tgbotapi.NewCallback(update.CallbackQuery.ID, "تغییر کرد"))
+
+				showSettingForm(user, int64(update.CallbackQuery.From.ID))
+
+				// remove last setting form
+				_, err := telegramBot.DeleteMessage(tgbotapi.DeleteMessageConfig{
+					ChatID:    int64(update.CallbackQuery.From.ID),
+					MessageID: update.CallbackQuery.Message.MessageID,
+				})
+
+				if err != nil {
+					log.Println(err)
+				}
+
+				continue
+			}
+
 			handleButtonPress(user, update.CallbackQuery)
 		}
 	}
+}
+
+func showCounts(update tgbotapi.Update, db *gorm.DB) {
+	if !isAdmin(update.Message.From.UserName) {
+
+		telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "شما دسترسی ندارید."))
+
+		log.Printf("Unauthorized access - username: %s", update.Message.From.UserName)
+		return
+	}
+
+	var alwaysLunchCounts int64
+	var todayHasLunchCounts int64
+	db.Model(&model.User{}).Where("always_lunch = ?", true).Count(&alwaysLunchCounts)
+	query := db.Model(&model.Reserve{})
+	query = query.Where("date = ? AND has_lunch = ?", time.Now().Truncate(24*time.Hour), true)
+	query = query.Where("(SELECT COUNT(*) FROM users WHERE users.id = reserves.user_id AND users.always_lunch = true) = 0")
+
+	var alwaysDinnerCounts int64
+	var todayHasDinnerCounts int64
+	db.Model(&model.User{}).Where("always_dinner = ?", true).Count(&alwaysDinnerCounts)
+	query2 := db.Model(&model.Reserve{})
+	query2 = query.Where("date = ? AND has_dinner = ?", time.Now().Truncate(24*time.Hour), true)
+	query2 = query.Where("(SELECT COUNT(*) FROM users WHERE users.id = reserves.user_id AND users.always_dinner = true) = 0")
+	query2.Count(&todayHasDinnerCounts)
+
+	statsMessage := fmt.Sprintf("نهار: %d\nشام: %d", todayHasLunchCounts + alwaysLunchCounts, todayHasDinnerCounts + alwaysDinnerCounts)
+
+	telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, statsMessage))
+}
+
+func showReservesDetails(update tgbotapi.Update, db *gorm.DB) {
+	if !isAdmin(update.Message.From.UserName) {
+
+		telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "شما دسترسی ندارید."))
+
+		log.Printf("Unauthorized access - username: %s", update.Message.From.UserName)
+		return
+	}
+
+	var statsMessage strings.Builder
+	today := time.Now()
+
+	for i := 0; i < 14; i++ {
+		var lunchUsers []model.User
+
+		date := today.AddDate(0, 0, i).Truncate(24 * time.Hour).Format("2006-01-02")
+
+		db.Model(&model.User{}).
+			Where("always_lunch = ? OR id IN (SELECT user_id FROM reserves WHERE has_lunch = ? AND date = ?)", true, true, date).
+			Find(&lunchUsers)
+
+		var dinnerUsers []model.User
+		db.Model(&model.User{}).
+			Where("always_dinner = ? OR id IN (SELECT user_id FROM reserves WHERE has_dinner = ? AND date = ?)", true, true, date).
+			Find(&dinnerUsers)
+
+		lunchUsernames := []string{}
+		for _, user := range lunchUsers {
+			lunchUsernames = append(lunchUsernames, fmt.Sprintf("@%s", user.Username))
+		}
+
+		dinnerUsernames := []string{}
+		for _, user := range dinnerUsers {
+			dinnerUsernames = append(dinnerUsernames, fmt.Sprintf("@%s", user.Username))
+		}
+
+		Date := today.AddDate(0, 0, i)
+
+		_, jalaliDateMonth, jalaliDateDay := utils.GregorianToJalali(Date.Year(), int(Date.Month()), Date.Day())
+
+		statsMessage.WriteString(fmt.Sprintf(
+			"%s\n\nlunch: %d\n%s\n\ndinner: %d\n%s\n\n----------\n",
+			fmt.Sprintf("%d/%d", jalaliDateMonth, jalaliDateDay),
+			len(lunchUsers),
+			strings.Join(lunchUsernames, "\n"),
+			len(dinnerUsers),
+			strings.Join(dinnerUsernames, "\n"),
+		))
+	}
+
+	telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, statsMessage.String()))
 }
 
 func handleSetMealName(update tgbotapi.Update, db *gorm.DB) {
@@ -405,6 +444,27 @@ func showMealSetFrom(chatID int64) {
 	_, err := telegramBot.Send(msg)
 	if err != nil {
 		log.Println("show meal list error", err)
+		return
+	}
+}
+
+func showSettingForm(user model.User, chatID int64) {
+
+	buttons := [][]tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText("همیشه شام", user.AlwaysDinner), "setting_always_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData(getButtonText("همیشه نهار", user.AlwaysLunch), "setting_always_lunch"),
+		),
+	}
+
+	inlineKeyboard := tgbotapi.NewInlineKeyboardMarkup(buttons...)
+
+	msg := tgbotapi.NewMessage(chatID, "تنظیمات کلی")
+	msg.ReplyMarkup = inlineKeyboard
+	msg.DisableNotification = true
+	_, err := telegramBot.Send(msg)
+	if err != nil {
+		log.Println("show setting error", err)
 		return
 	}
 }
