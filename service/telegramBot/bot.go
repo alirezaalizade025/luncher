@@ -52,6 +52,8 @@ func StartBotServer() {
 
 		if update.Message != nil {
 
+			println(update.Message.Text)
+
 			if _, found := memCache.Get(fmt.Sprintf("%s_set_meal", update.Message.From.UserName)); found {
 
 				handleSetMealName(update, db)
@@ -123,7 +125,7 @@ func StartBotServer() {
 			}
 
 			if update.Message.Text == "/setting" {
-				println("setting" + user.Username)
+				println("setting" + user.Username) // todo: remove
 				showSettingForm(user, update.Message.Chat.ID)
 			}
 
