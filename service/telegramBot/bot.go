@@ -52,8 +52,6 @@ func StartBotServer() {
 
 		if update.Message != nil {
 
-			println(update.Message.Text)
-
 			if _, found := memCache.Get(fmt.Sprintf("%s_set_meal", update.Message.From.UserName)); found {
 
 				handleSetMealName(update, db)
@@ -125,7 +123,7 @@ func StartBotServer() {
 			}
 
 			if update.Message.Text == "/setting" {
-				println("setting" + user.Username) // todo: remove
+
 				showSettingForm(user, update.Message.Chat.ID)
 			}
 
@@ -200,13 +198,14 @@ func showCounts(update tgbotapi.Update, db *gorm.DB) {
 	query := db.Model(&model.Reserve{})
 	query = query.Where("date = ? AND has_lunch = ?", time.Now().Truncate(24*time.Hour), true)
 	query = query.Where("(SELECT COUNT(*) FROM users WHERE users.id = reserves.user_id AND users.always_lunch = true) = 0")
+	query.Count(&todayHasLunchCounts)
 
 	var alwaysDinnerCounts int64
 	var todayHasDinnerCounts int64
 	db.Model(&model.User{}).Where("always_dinner = ?", true).Count(&alwaysDinnerCounts)
 	query2 := db.Model(&model.Reserve{})
-	query2 = query.Where("date = ? AND has_dinner = ?", time.Now().Truncate(24*time.Hour), true)
-	query2 = query.Where("(SELECT COUNT(*) FROM users WHERE users.id = reserves.user_id AND users.always_dinner = true) = 0")
+	query2 = query2.Where("date = ? AND has_dinner = ?", time.Now().Truncate(24*time.Hour), true)
+	query2 = query2.Where("(SELECT COUNT(*) FROM users WHERE users.id = reserves.user_id AND users.always_dinner = true) = 0")
 	query2.Count(&todayHasDinnerCounts)
 
 	statsMessage := fmt.Sprintf("نهار: %d\nشام: %d", todayHasLunchCounts+alwaysLunchCounts, todayHasDinnerCounts+alwaysDinnerCounts)
