@@ -84,7 +84,7 @@ func StartBotServer() {
 				showReservesDetails(update, db)
 				continue
 			}
- 
+
 			// Start command to show the meal selection form
 			if update.Message.Text == "/start" {
 
@@ -364,11 +364,17 @@ func showMealSelectionForm(user model.User, chatID int64) {
 		index := int(weekNumber*7+int(faDayNumber)) - 1
 
 		// Check if the user has already selected a meal for this day
-		var selectedMeal model.Reserve
+		selectedMeal := model.Reserve{
+			HasDinner: user.AlwaysDinner,
+			HasLunch:  user.AlwaysLunch,
+		}
+
 		for _, reserve := range next14DaysReserves {
 
 			if reserve.Date.Format("2006-01-02") == date.Format("2006-01-02") {
-				selectedMeal = reserve
+
+				selectedMeal.HasDinner = reserve.HasDinner
+				selectedMeal.HasLunch = reserve.HasLunch
 				break
 			}
 		}
@@ -536,6 +542,15 @@ func handleButtonPress(user model.User, callback *tgbotapi.CallbackQuery) {
 			date := time.Now().AddDate(0, 0, i).Truncate(24 * time.Hour)
 			db := database.Connection().Conn
 
+			// max edit time is yesterday 17:30
+			maxEditTime := date.AddDate(0, 0, -1).Truncate(24 * time.Hour).Add(17*time.Hour + 30*time.Minute)
+
+			// if date is today and hour pass from 20 in tehran
+			// show error message
+			if time.Now().After(maxEditTime) {
+				continue
+			}
+
 			var reserve model.Reserve
 
 			query := db.Model(&model.Reserve{})
@@ -583,9 +598,12 @@ func handleButtonPress(user model.User, callback *tgbotapi.CallbackQuery) {
 			return
 		}
 
+		// max edit time is yesterday 17:30
+		maxEditTime := date.AddDate(0, 0, -1).Truncate(24 * time.Hour).Add(17*time.Hour + 30*time.Minute)
+
 		// if date is today and hour pass from 20 in tehran
 		// show error message
-		if date.Before(time.Now().AddDate(0, 0, 1).Truncate(24*time.Hour)) && (time.Now().Hour() >= 17 && time.Now().Minute() >= 30) {
+		if time.Now().After(maxEditTime) {
 			telegramBot.AnswerCallbackQuery(tgbotapi.NewCallback(callback.ID, "زمان تغییر برای این روز به پایان رسیده است"))
 			return
 		}
