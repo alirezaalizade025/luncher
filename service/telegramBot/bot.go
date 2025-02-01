@@ -90,10 +90,9 @@ func StartBotServer() {
 
 				createUser(update, db)
 
-				// todo: select always lunch/dinner
+				helpStr := helpMessageCreator(update)
 
-				// welcome message
-				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "در اینجا پیام راهنما نصب خواهد شد."))
+				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, helpStr.String()))
 			}
 
 			user := findUser(db, update.Message.Chat.ID)
@@ -109,7 +108,10 @@ func StartBotServer() {
 			}
 
 			if update.Message.Text == "/help" {
-				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "به زودی در این محل راهنما قرار میگیرد."))
+
+				helpStr := helpMessageCreator(update)
+
+				telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, helpStr.String()))
 			}
 
 			if update.Message.Text == "/setting" {
@@ -171,6 +173,26 @@ func StartBotServer() {
 			handleButtonPress(user, update.CallbackQuery)
 		}
 	}
+}
+
+func helpMessageCreator(update tgbotapi.Update) strings.Builder {
+	helpStr := strings.Builder{}
+
+	helpStr.WriteString("راهنما:\n")
+	helpStr.WriteString("/select - انتخاب غذا\n")
+	helpStr.WriteString("\t\t\tوعده های غذایی دو هفته‌ی آینده نمایش داده میشود و قابل اضافه و حذف شدن هستند. ( توجه داشته باشید که وعده هر روز نهایتا تا ساعت ۲۰ روز قبل، قابل تغییر میباشد)\n")
+	helpStr.WriteString("/setting - تنظیمات\n")
+	helpStr.WriteString("\t\t\tاگر گزینه همیشه نهار یا همیشه شام را انتخاب کنید به صورت کامل تمام آن وعده در کل هفت روز هفته انتخاب شده و نیاز به انخاب دانه دانه نمیباشد.\n")
+
+	if isAdmin(update.Message.From.UserName) {
+
+		helpStr.WriteString("\n\n")
+		helpStr.WriteString("تنظیمات مخصوص ادمین:\n")
+		helpStr.WriteString("/setList - ویرایش لیست غذا دو هفته ای\n")
+		helpStr.WriteString("/getCounts - نمایش تعداد امروز\n")
+		helpStr.WriteString("/getReserves - نمایش جزئیات دو هفته آینده\n")
+	}
+	return helpStr
 }
 
 func createUser(update tgbotapi.Update, db *gorm.DB) model.User {
@@ -257,11 +279,12 @@ func showReservesDetails(update tgbotapi.Update, db *gorm.DB) {
 
 		Date := today.AddDate(0, 0, i)
 
-		_, jalaliDateMonth, jalaliDateDay := utils.GregorianToJalali(Date.Year(), int(Date.Month()), Date.Day())
+		jalaliDateYear, jalaliDateMonth, jalaliDateDay := utils.GregorianToJalali(Date.Year(), int(Date.Month()), Date.Day())
 
 		statsMessage.WriteString(fmt.Sprintf(
 			"%s\n\nlunch: %d\n%s\n\ndinner: %d\n%s\n\n----------\n",
-			fmt.Sprintf("%d/%d", jalaliDateMonth, jalaliDateDay),
+
+		fmt.Sprintf("%d/%d/%d", jalaliDateYear, jalaliDateMonth, jalaliDateDay),
 			len(lunchUsers),
 			strings.Join(lunchUsernames, "\n"),
 			len(dinnerUsers),
@@ -291,7 +314,7 @@ func handleSetMealName(update tgbotapi.Update, db *gorm.DB) {
 
 	db.Save(&meal)
 
-	telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Meal updated successfully"))
+	telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "بروزرسانی شد."))
 	memCache.Delete(fmt.Sprintf("%s_set_meal", update.Message.From.UserName))
 
 	showMealSetFrom(int64(update.Message.Chat.ID))
@@ -451,7 +474,7 @@ func showMealSetFrom(chatID int64) {
 
 	inlineKeyboard := tgbotapi.NewInlineKeyboardMarkup(buttons...)
 
-	msg := tgbotapi.NewMessage(chatID, "Please select your meal preferences for each day.")
+	msg := tgbotapi.NewMessage(chatID, "انتخاب کنید.")
 	msg.ReplyMarkup = inlineKeyboard
 	msg.DisableNotification = true
 	_, err := telegramBot.Send(msg)
