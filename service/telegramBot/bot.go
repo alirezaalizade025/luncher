@@ -306,6 +306,8 @@ func handleSetMealName(update tgbotapi.Update, db *gorm.DB) {
 		ID: uint(mealID),
 	}
 
+	db.First(&meal)
+
 	if mealType == "lunch" {
 		meal.Lunch = &update.Message.Text
 	} else if mealType == "dinner" {
