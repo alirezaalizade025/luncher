@@ -284,7 +284,7 @@ func showReservesDetails(update tgbotapi.Update, db *gorm.DB) {
 		statsMessage.WriteString(fmt.Sprintf(
 			"%s\n\nlunch: %d\n%s\n\ndinner: %d\n%s\n\n----------\n",
 
-		fmt.Sprintf("%d/%d/%d", jalaliDateYear, jalaliDateMonth, jalaliDateDay),
+			fmt.Sprintf("%d/%d/%d", jalaliDateYear, jalaliDateMonth, jalaliDateDay),
 			len(lunchUsers),
 			strings.Join(lunchUsernames, "\n"),
 			len(dinnerUsers),
@@ -363,9 +363,9 @@ func showMealSelectionForm(user model.User, chatID int64) {
 
 	buttons := [][]tgbotapi.InlineKeyboardButton{
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("همه شام ها", "all_dinner"),
-			tgbotapi.NewInlineKeyboardButtonData("همه نهار ها", "all_lunch"),
-			tgbotapi.NewInlineKeyboardButtonData("*", "all"),
+			tgbotapi.NewInlineKeyboardButtonData("انتخاب همه شام ها", "all_dinner"),
+			tgbotapi.NewInlineKeyboardButtonData("انتخاب همه نهار ها", "all_lunch"),
+			tgbotapi.NewInlineKeyboardButtonSwitch("*", "all"),
 		),
 	}
 
@@ -597,8 +597,8 @@ func handleButtonPress(user model.User, callback *tgbotapi.CallbackQuery) {
 			}
 
 			if selectedOption == "all" {
-				reserve.HasLunch = true
-				reserve.HasDinner = true
+				// reserve.HasLunch = true
+				// reserve.HasDinner = true
 			} else if selectedOption == "all_lunch" {
 				reserve.HasLunch = true
 			} else if selectedOption == "all_dinner" {
@@ -652,8 +652,8 @@ func handleButtonPress(user model.User, callback *tgbotapi.CallbackQuery) {
 			reserve = model.Reserve{
 				Date:      date,
 				UserID:    user.ID,
-				HasLunch:  isLunch,
-				HasDinner: isDinner,
+				HasLunch:  isLunch || user.AlwaysLunch,
+				HasDinner: isDinner || user.AlwaysDinner,
 			}
 		}
 
@@ -670,6 +670,11 @@ func handleButtonPress(user model.User, callback *tgbotapi.CallbackQuery) {
 		}
 
 		db.Save(&reserve)
+
+		if user.AlwaysLunch || user.AlwaysDinner {
+			telegramBot.AnswerCallbackQuery(tgbotapi.NewCallback(callback.ID, fmt.Sprintf("حالت اتوماتیک برای %s غیر فعال شد.", utils.GetFaDayName(date.Weekday()))))
+
+		}
 
 		// Send the updated message to the user
 		telegramBot.AnswerCallbackQuery(tgbotapi.NewCallback(callback.ID, fmt.Sprintf("%s تغییر کرد", utils.GetFaDayName(date.Weekday()))))
