@@ -269,12 +269,14 @@ func showReservesDetails(update tgbotapi.Update, db *gorm.DB) {
 
 		lunchUsernames := []string{}
 		for _, user := range lunchUsers {
-			lunchUsernames = append(lunchUsernames, fmt.Sprintf("@%s", user.Username))
+			userLink := fmt.Sprintf(`<a href="tg://user?id=%d">%s</a>`, user.TelegramID, user.Name)
+			lunchUsernames = append(lunchUsernames, userLink)
 		}
 
 		dinnerUsernames := []string{}
 		for _, user := range dinnerUsers {
-			dinnerUsernames = append(dinnerUsernames, fmt.Sprintf("@%s", user.Username))
+			userLink := fmt.Sprintf(`<a href="tg://user?id=%d">%s</a>`, user.TelegramID, user.Name)
+			dinnerUsernames = append(dinnerUsernames, userLink)
 		}
 
 		Date := today.AddDate(0, 0, i)
@@ -291,8 +293,9 @@ func showReservesDetails(update tgbotapi.Update, db *gorm.DB) {
 			strings.Join(dinnerUsernames, "\n"),
 		))
 	}
-
-	telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, statsMessage.String()))
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, statsMessage.String())
+	msg.ParseMode = "HTML"
+	telegramBot.Send(msg)
 }
 
 func handleSetMealName(update tgbotapi.Update, db *gorm.DB) {
