@@ -242,12 +242,13 @@ func showCounts(update tgbotapi.Update, db *gorm.DB) {
 		var lunchUsersCounts int64
 
 		date := today.AddDate(0, 0, i).Truncate(24 * time.Hour)
-		// weekNumber := utils.GetJalaliWeekNumber(date)
-		// if weekNumber > 0 {
-		// 	weekNumber--
-		// }
+
 		weekDay := date.Weekday()
 		faDayNumber := utils.GetJalaliWeekDayNumber(weekDay)
+		faDayName := utils.GetFaDayNameByNumber(faDayNumber)
+
+		_, faMonth, faDay := utils.GregorianToJalali(date.Year(), int(date.Month()), date.Day())
+		key := fmt.Sprintf("%s (%d/%d)", faDayName, faMonth, faDay)
 
 		dataString := date.Format("2006-01-02")
 
@@ -263,7 +264,7 @@ func showCounts(update tgbotapi.Update, db *gorm.DB) {
 		rowButton := tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%d", dinnerUsersCount), "..."),
 			tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%d", lunchUsersCounts), "..."),
-			tgbotapi.NewInlineKeyboardButtonData(utils.GetFaDayNameByNumber(faDayNumber), "..."),
+			tgbotapi.NewInlineKeyboardButtonData(key, "..."),
 		)
 
 		buttons = append(buttons, rowButton)
