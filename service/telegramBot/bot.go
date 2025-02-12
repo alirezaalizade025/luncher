@@ -186,7 +186,7 @@ func helpMessageCreator(update tgbotapi.Update) strings.Builder {
 	helpStr.WriteString("/select - انتخاب غذا\n")
 	helpStr.WriteString("\t\t\tوعده های غذایی دو هفته‌ی آینده نمایش داده میشود و قابل اضافه و حذف شدن هستند. ( توجه داشته باشید که وعده هر روز نهایتا تا ساعت ۲۰ روز قبل، قابل تغییر میباشد)\n")
 	helpStr.WriteString("/setting - تنظیمات\n")
-	helpStr.WriteString("\t\t\tاگر گزینه همیشه نهار یا همیشه شام را انتخاب کنید به صورت کامل تمام آن وعده در کل هفت روز هفته انتخاب شده و نیاز به انخاب دانه دانه نمیباشد.\n")
+	helpStr.WriteString("\t\t\tاگر گزینه همیشه نهار یا همیشه شام را انتخاب کنید، در همه روز های هفته، آن وعده غذایی انتخاب شده و نیاز به انتخاب جداگانه‌ی هر روز نمیباشد.\n")
 
 	if isAdmin(update.Message.From.UserName) {
 
