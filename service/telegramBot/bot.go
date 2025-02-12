@@ -124,6 +124,10 @@ func StartBotServer() {
 		// Handle button presses (callback queries)
 		if update.CallbackQuery != nil {
 
+			if strings.HasPrefix(update.CallbackQuery.Data, "...") {
+				continue
+			}
+
 			if strings.HasPrefix(update.CallbackQuery.Data, "set_lunch_") ||
 				strings.HasPrefix(update.CallbackQuery.Data, "set_dinner_") {
 
@@ -220,25 +224,61 @@ func showCounts(update tgbotapi.Update, db *gorm.DB) {
 		return
 	}
 
-	var alwaysLunchCounts int64
-	var todayHasLunchCounts int64
-	db.Model(&model.User{}).Where("always_lunch = ?", true).Count(&alwaysLunchCounts)
-	query := db.Model(&model.Reserve{})
-	query = query.Where("date = ? AND has_lunch = ?", time.Now().Truncate(24*time.Hour), true)
-	query = query.Where("(SELECT COUNT(*) FROM users WHERE users.id = reserves.user_id AND users.always_lunch = true) = 0")
-	query.Count(&todayHasLunchCounts)
+	buttons := [][]tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("شام", "..."),
+			tgbotapi.NewInlineKeyboardButtonData("نهار", "..."),
+			tgbotapi.NewInlineKeyboardButtonSwitch("*", "..."),
+		),
+	}
 
-	var alwaysDinnerCounts int64
-	var todayHasDinnerCounts int64
-	db.Model(&model.User{}).Where("always_dinner = ?", true).Count(&alwaysDinnerCounts)
-	query2 := db.Model(&model.Reserve{})
-	query2 = query2.Where("date = ? AND has_dinner = ?", time.Now().Truncate(24*time.Hour), true)
-	query2 = query2.Where("(SELECT COUNT(*) FROM users WHERE users.id = reserves.user_id AND users.always_dinner = true) = 0")
-	query2.Count(&todayHasDinnerCounts)
+	var next14DaysMeals []model.Meal
+	db.Order("id").Find(&next14DaysMeals)
 
-	statsMessage := fmt.Sprintf("نهار: %d\nشام: %d", todayHasLunchCounts+alwaysLunchCounts, todayHasDinnerCounts+alwaysDinnerCounts)
+	today := time.Now()
 
-	telegramBot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, statsMessage))
+	for i := 0; i < 14; i++ {
+
+		var lunchUsersCounts int64
+
+		date := today.AddDate(0, 0, i).Truncate(24 * time.Hour)
+		// weekNumber := utils.GetJalaliWeekNumber(date)
+		// if weekNumber > 0 {
+		// 	weekNumber--
+		// }
+		weekDay := date.Weekday()
+		faDayNumber := utils.GetJalaliWeekDayNumber(weekDay)
+
+		dataString := date.Format("2006-01-02")
+
+		db.Model(&model.User{}).
+			Where("(always_lunch = ? AND NOT EXISTS(SELECT user_id FROM reserves WHERE date = ?)) OR id IN (SELECT user_id FROM reserves WHERE date = ? AND has_lunch = ?)", true, dataString, dataString, true).
+			Count(&lunchUsersCounts)
+
+		var dinnerUsersCount int64
+		db.Model(&model.User{}).
+			Where("(always_dinner = ? AND NOT EXISTS(SELECT user_id FROM reserves WHERE date = ?)) OR id IN (SELECT user_id FROM reserves WHERE date = ? AND has_dinner = ?)", true, dataString, dataString, true).
+			Count(&dinnerUsersCount)
+
+		rowButton := tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%d", dinnerUsersCount), "..."),
+			tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%d", lunchUsersCounts), "..."),
+			tgbotapi.NewInlineKeyboardButtonData(utils.GetFaDayNameByNumber(faDayNumber), "..."),
+		)
+
+		buttons = append(buttons, rowButton)
+	}
+
+	inlineKeyboard := tgbotapi.NewInlineKeyboardMarkup(buttons...)
+
+	msg := tgbotapi.NewMessage(int64(update.Message.From.ID), "لیست")
+	msg.ReplyMarkup = inlineKeyboard
+	msg.DisableNotification = true
+	_, err := telegramBot.Send(msg)
+	if err != nil {
+		log.Println("show meal list error", err)
+		return
+	}
 }
 
 func showReservesDetails(update tgbotapi.Update, db *gorm.DB) {
@@ -259,12 +299,12 @@ func showReservesDetails(update tgbotapi.Update, db *gorm.DB) {
 		date := today.AddDate(0, 0, i).Truncate(24 * time.Hour).Format("2006-01-02")
 
 		db.Model(&model.User{}).
-			Where("always_lunch = ? OR id IN (SELECT user_id FROM reserves WHERE has_lunch = ? AND date = ?)", true, true, date).
+			Where("(always_lunch = ? AND NOT EXISTS(SELECT user_id FROM reserves WHERE date = ?)) OR id IN (SELECT user_id FROM reserves WHERE date = ? AND has_lunch = ?)", true, date, date, true).
 			Find(&lunchUsers)
 
 		var dinnerUsers []model.User
 		db.Model(&model.User{}).
-			Where("always_dinner = ? OR id IN (SELECT user_id FROM reserves WHERE has_dinner = ? AND date = ?)", true, true, date).
+			Where("(always_dinner = ? AND NOT EXISTS(SELECT user_id FROM reserves WHERE date = ?)) OR id IN (SELECT user_id FROM reserves WHERE date = ? AND has_dinner = ?)", true, date, date, true).
 			Find(&dinnerUsers)
 
 		lunchUsernames := []string{}
@@ -704,7 +744,6 @@ func handleButtonPress(user model.User, callback *tgbotapi.CallbackQuery) {
 
 	// replace showMealSelectionForm with last showMealSelectionForm
 	showMealSelectionForm(user, callback.Message.Chat.ID)
-
 }
 
 // Get the button text depending on whether the meal is selected or not
