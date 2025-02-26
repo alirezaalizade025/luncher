@@ -18,6 +18,39 @@ import (
 var telegramBot *tgbotapi.BotAPI
 var memCache *utils.Store
 
+func Reminder() {
+
+	if time.Now().Weekday() != time.Friday || time.Now().Hour() != 15 {
+
+		time.Sleep(24 * time.Hour)
+		Reminder()
+	}
+
+	users := []model.User{}
+
+	db := database.Connection().Conn
+	db.Table("users").Find(&users)
+
+	for _, user := range users {
+
+		massageStr := strings.Builder{}
+		massageStr.WriteString("لیست غذا یادت نره 👋\n\n")
+		massageStr.WriteString("یکبار دیگه از منو، دکمه انتخاب رو بزنید تا لیست بروزرسانی شود و بعد انتخاب کنید.")
+
+		msg := tgbotapi.NewMessage(user.TelegramID, massageStr.String())
+
+		_, err := telegramBot.Send(msg)
+		if err != nil {
+			log.Println("show meal list error", err)
+			continue
+		}
+	}
+
+	time.Sleep(24 * time.Hour)
+
+	Reminder()
+}
+
 func LoadBot() {
 
 	// Replace with your Bot's token

@@ -30,6 +30,8 @@ func main() {
 
 	telegramBot.LoadBot()
 
+	go telegramBot.Reminder()
+
 	telegramBot.StartBotServer()
 
 	app.Run(":8085")
