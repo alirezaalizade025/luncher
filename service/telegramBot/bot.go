@@ -286,12 +286,12 @@ func showCounts(update tgbotapi.Update, db *gorm.DB) {
 		dataString := date.Format("2006-01-02")
 
 		db.Model(&model.User{}).
-			Where("(always_lunch = ? AND NOT EXISTS(SELECT user_id FROM reserves WHERE date = ?)) OR id IN (SELECT user_id FROM reserves WHERE date = ? AND has_lunch = ?)", true, dataString, dataString, true).
+			Where("(always_lunch = ? AND NOT EXISTS(SELECT user_id FROM reserves WHERE reserves.id = users.id and date = ?)) OR id IN (SELECT user_id FROM reserves WHERE date = ? AND has_lunch = ?)", true, dataString, dataString, true).
 			Count(&lunchUsersCounts)
 
 		var dinnerUsersCount int64
 		db.Model(&model.User{}).
-			Where("(always_dinner = ? AND NOT EXISTS(SELECT user_id FROM reserves WHERE date = ?)) OR id IN (SELECT user_id FROM reserves WHERE date = ? AND has_dinner = ?)", true, dataString, dataString, true).
+			Where("(always_dinner = ? AND NOT EXISTS(SELECT user_id FROM reserves WHERE reserves.id = users.id and date = ?)) OR id IN (SELECT user_id FROM reserves WHERE date = ? AND has_dinner = ?)", true, dataString, dataString, true).
 			Count(&dinnerUsersCount)
 
 		rowButton := tgbotapi.NewInlineKeyboardRow(
@@ -333,12 +333,12 @@ func showReservesDetails(update tgbotapi.Update, db *gorm.DB) {
 		date := today.AddDate(0, 0, i).Truncate(24 * time.Hour).Format("2006-01-02")
 
 		db.Model(&model.User{}).
-			Where("(always_lunch = ? AND NOT EXISTS(SELECT user_id FROM reserves WHERE date = ?)) OR id IN (SELECT user_id FROM reserves WHERE date = ? AND has_lunch = ?)", true, date, date, true).
+			Where("(always_lunch = ? AND NOT EXISTS(SELECT user_id FROM reserves WHERE reserves.id = users.id and date = ?)) OR id IN (SELECT user_id FROM reserves WHERE date = ? AND has_lunch = ?)", true, date, date, true).
 			Find(&lunchUsers)
 
 		var dinnerUsers []model.User
 		db.Model(&model.User{}).
-			Where("(always_dinner = ? AND NOT EXISTS(SELECT user_id FROM reserves WHERE date = ?)) OR id IN (SELECT user_id FROM reserves WHERE date = ? AND has_dinner = ?)", true, date, date, true).
+			Where("(always_dinner = ? AND NOT EXISTS(SELECT user_id FROM reserves WHERE reserves.id = users.id and date = ?)) OR id IN (SELECT user_id FROM reserves WHERE date = ? AND has_dinner = ?)", true, date, date, true).
 			Find(&dinnerUsers)
 
 		lunchUsernames := []string{}
