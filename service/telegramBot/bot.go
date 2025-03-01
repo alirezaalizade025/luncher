@@ -20,35 +20,40 @@ var memCache *utils.Store
 
 func Reminder() {
 
-	if time.Now().Weekday() != time.Friday || time.Now().Hour() != 15 {
+	var lastSent time.Time
 
-		time.Sleep(24 * time.Hour)
-		Reminder()
-	}
+	for {
+		now := time.Now()
 
-	users := []model.User{}
+		// Wait until Friday at 15:00
+		if now.Weekday() == time.Friday && now.Hour() == 15 && lastSent.Add(24*time.Hour).Before(now) {
+			users := []model.User{}
 
-	db := database.Connection().Conn
-	db.Table("users").Find(&users)
+			db := database.Connection().Conn
+			db.Table("users").Find(&users)
 
-	for _, user := range users {
+			for _, user := range users {
+				messageStr := strings.Builder{}
+				messageStr.WriteString("لیست غذا یادت نره 👋\n\n")
+				messageStr.WriteString("یکبار دیگه از منو، دکمه انتخاب رو بزنید تا لیست بروزرسانی شود و بعد انتخاب کنید.")
 
-		massageStr := strings.Builder{}
-		massageStr.WriteString("لیست غذا یادت نره 👋\n\n")
-		massageStr.WriteString("یکبار دیگه از منو، دکمه انتخاب رو بزنید تا لیست بروزرسانی شود و بعد انتخاب کنید.")
+				msg := tgbotapi.NewMessage(user.TelegramID, messageStr.String())
 
-		msg := tgbotapi.NewMessage(user.TelegramID, massageStr.String())
+				_, err := telegramBot.Send(msg)
+				if err != nil {
+					log.Println("show meal list error", err)
+					continue
+				}
+			}
 
-		_, err := telegramBot.Send(msg)
-		if err != nil {
-			log.Println("show meal list error", err)
-			continue
+			lastSent = now
+
+			log.Println("Reminders sent!")
 		}
+
+		// Sleep and check again in 1 hour
+		time.Sleep(1 * time.Hour)
 	}
-
-	time.Sleep(24 * time.Hour)
-
-	Reminder()
 }
 
 func LoadBot() {
