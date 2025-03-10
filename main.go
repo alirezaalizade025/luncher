@@ -36,3 +36,14 @@ func main() {
 
 	app.Run(":8085")
 }
+
+func setTimeZone() {
+
+	// Set the timezone globally
+	os.Setenv("TZ", "Asia/Tehran")
+
+	// Load location and set as the default
+	loc, _ := time.LoadLocation("Local")
+	time.Local = loc
+
+}

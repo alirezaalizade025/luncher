@@ -13,6 +13,7 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"gorm.io/gorm"
+	Jalaali "github.com/jalaali/go-jalaali"
 )
 
 var telegramBot *tgbotapi.BotAPI
@@ -285,8 +286,8 @@ func showCounts(update tgbotapi.Update, db *gorm.DB) {
 		faDayNumber := utils.GetJalaliWeekDayNumber(weekDay)
 		faDayName := utils.GetFaDayNameByNumber(faDayNumber)
 
-		_, faMonth, faDay := utils.GregorianToJalali(date.Year(), int(date.Month()), date.Day())
-		key := fmt.Sprintf("%s (%d/%d)", faDayName, faMonth, faDay)
+		_, jMonth, jDay, _ := Jalaali.ToJalaali(date.Year(), date.Month(), date.Day())
+		key := fmt.Sprintf("%s (%d\u200c%s)", faDayName, jDay, jMonth)
 
 		dataString := date.Format("2006-01-02")
 
@@ -360,7 +361,7 @@ func showReservesDetails(update tgbotapi.Update, db *gorm.DB) {
 
 		Date := today.AddDate(0, 0, i)
 
-		jalaliDateYear, jalaliDateMonth, jalaliDateDay := utils.GregorianToJalali(Date.Year(), int(Date.Month()), Date.Day())
+		jalaliDateYear, jalaliDateMonth, jalaliDateDay, _ := Jalaali.ToJalaali(Date.Year(), Date.Month(), Date.Day())
 
 		statsMessage.WriteString(fmt.Sprintf(
 			"%s\n\nlunch: %d\n%s\n\ndinner: %d\n%s\n\n----------\n",
@@ -466,7 +467,6 @@ func showMealSelectionForm(user model.User, chatID int64) {
 		weekDay := date.Weekday()
 		faDayNumber := utils.GetJalaliWeekDayNumber(weekDay)
 		faDayName := utils.GetFaDayName(weekDay)
-		_, faMonth, faDay := utils.GregorianToJalali(date.Year(), int(date.Month()), date.Day())
 
 		index := int(weekNumber*7+int(faDayNumber)) - 1
 
@@ -486,7 +486,8 @@ func showMealSelectionForm(user model.User, chatID int64) {
 			}
 		}
 
-		key := fmt.Sprintf("%s (%d/%d)", faDayName, faMonth, faDay)
+		_, jMonth, jDay, _ := Jalaali.ToJalaali(date.Year(), date.Month(), date.Day())
+		key := fmt.Sprintf("%s (%d\u200c%s)", faDayName, jDay, jMonth)
 
 		rowButton := tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(getButtonText(dinnersList[index], selectedMeal.HasDinner), fmt.Sprintf("%s_dinner", date.Format("2006-01-02"))),
